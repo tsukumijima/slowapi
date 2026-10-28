@@ -1,5 +1,6 @@
 import hiro  # type: ignore
 import pytest  # type: ignore
+from fastapi import APIRouter
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 from starlette.testclient import TestClient
@@ -369,3 +370,26 @@ class TestDecorators(TestSlowapi):
                 )
                 == 2
             )
+
+    def test_default_limits_on_included_router(self, build_fastapi_app):
+        app, limiter = build_fastapi_app(
+            key_func=lambda: "test", default_limits=["1/minute"]
+        )
+        router = APIRouter(prefix="/api")
+
+        @router.get("/t1")
+        async def t1(request: Request):
+            return PlainTextResponse("test")
+
+        @router.get("/t2")
+        @limiter.exempt
+        async def t2(request: Request):
+            return PlainTextResponse("test")
+
+        app.include_router(router)
+
+        client = TestClient(app)
+        assert client.get("/api/t1").status_code == 200
+        assert client.get("/api/t1").status_code == 429
+        assert client.get("/api/t2").status_code == 200
+        assert client.get("/api/t2").status_code == 200

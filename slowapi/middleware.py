@@ -14,14 +14,22 @@ from starlette.types import ASGIApp, Message, Scope, Receive, Send
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 
+try:
+    # FastAPI >= 0.137.2 keeps included routers as a tree in `app.routes`
+    from fastapi.routing import iter_route_contexts
+except ImportError:
+    iter_route_contexts = None
+
 
 def _find_route_handler(
     routes: Iterable[BaseRoute], scope: Scope
 ) -> Optional[Callable]:
+    if iter_route_contexts is not None:
+        routes = iter_route_contexts(list(routes))
     handler = None
     for route in routes:
         match, _ = route.matches(scope)
-        if match == Match.FULL and hasattr(route, "endpoint"):
+        if match == Match.FULL and getattr(route, "endpoint", None) is not None:
             handler = route.endpoint  # type: ignore
     return handler
 
